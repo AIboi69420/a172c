@@ -1,12 +1,10 @@
 import os
 import sys
 import platform
-import shutil
 import urllib.request
-import zipfile
 import subprocess
-
-# ----------- Ensure ffmpeg is installed or downloaded -----------
+import shutil
+from pathlib import Path
 
 # ----------- Virtual Environment and Package Setup -----------
 
@@ -20,6 +18,14 @@ REQUIREMENTS = [
     "pydub",
 ]
 
+MODEL_NAME = "openhermes-2-mistral-7b.Q4_K_M.gguf"
+MODEL_DIR = Path("models")
+MODEL_PATH = MODEL_DIR / MODEL_NAME
+MODEL_URL = "https://huggingface.co/openhermes/openhermes-2-mistral-7b.Q4_K_M/resolve/main/openhermes-2-mistral-7b.Q4_K_M.gguf"
+# Replace with the actual direct URL of your model file
+
+VENV_DIR = Path("venv")
+
 def run_command(cmd, shell=False):
     try:
         subprocess.run(cmd, shell=shell, check=True)
@@ -29,36 +35,42 @@ def run_command(cmd, shell=False):
         sys.exit(e.returncode)
 
 def is_onedrive_path(path):
-    return "onedrive" in path.lower()
+    # Lowercase and check if 'onedrive' exists in any part of the path
+    path_str = str(path).lower()
+    return "onedrive" in path_str
 
 def create_venv():
-    venv_dir = "venv"
-    if os.path.exists(venv_dir):
+    if VENV_DIR.exists():
         print("ℹ️ Virtual environment already exists. Skipping creation.")
         return
 
     print("🔧 Creating virtual environment...")
     try:
-        run_command([sys.executable, "-m", "venv", venv_dir])
+        run_command([sys.executable, "-m", "venv", str(VENV_DIR)])
         print("✅ Virtual environment created.\n")
     except PermissionError:
         print("❌ Permission denied while creating the virtual environment.")
-        print("💡 Try running this script as Administrator or move the folder out of OneDrive.")
+        print("💡 Try running this script as Administrator/root or move the folder out of OneDrive.")
         sys.exit(1)
+
+def get_venv_python():
+    # Use platform-agnostic way to find python in venv
+    if platform.system() == "Windows":
+        python_exe = VENV_DIR / "Scripts" / "python.exe"
+    else:
+        python_exe = VENV_DIR / "bin" / "python"
+
+    if not python_exe.exists():
+        print("❌ Python executable not found in virtual environment.")
+        sys.exit(1)
+    return str(python_exe)
 
 def install_requirements():
     print("📦 Installing packages in the virtual environment...")
 
-    python_path = (
-        os.path.join("venv", "Scripts", "python.exe") if platform.system() == "Windows"
-        else os.path.join("venv", "bin", "python")
-    )
+    python_path = get_venv_python()
 
-    if not os.path.exists(python_path):
-        print("❌ Python executable not found in virtual environment.")
-        sys.exit(1)
-
-    # Upgrade pip via python -m pip, not pip.exe directly
+    # Upgrade pip first
     run_command([python_path, "-m", "pip", "install", "--upgrade", "pip"])
 
     for pkg in REQUIREMENTS:
@@ -66,29 +78,44 @@ def install_requirements():
 
     print("✅ All required packages installed.\n")
 
+def download_model():
+    if not MODEL_DIR.exists():
+        MODEL_DIR.mkdir(parents=True)
+        print(f"📂 Created models directory at {MODEL_DIR}")
+
+    if MODEL_PATH.exists():
+        print(f"✅ Model already exists at {MODEL_PATH}. Skipping download.")
+        return
+
+    print(f"⬇️ Downloading model from {MODEL_URL} ...")
+    try:
+        urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+        print(f"✅ Model downloaded successfully to {MODEL_PATH}\n")
+    except Exception as e:
+        print(f"❌ Failed to download model: {e}")
+        sys.exit(1)
+
 def run_chat_py():
     print("🚀 Launching chat.py...\n")
 
-    python_path = (
-        os.path.join("venv", "Scripts", "python.exe") if platform.system() == "Windows"
-        else os.path.join("venv", "bin", "python")
-    )
+    python_path = get_venv_python()
 
-    if not os.path.exists("chat.py"):
+    chat_path = Path("chat.py")
+    if not chat_path.exists():
         print("❌ chat.py not found in current directory.")
         sys.exit(1)
 
-    run_command([python_path, "chat.py"])
+    run_command([python_path, str(chat_path)])
 
 # ----------- Main flow -----------
 
 def main():
-    # First ensure ffmpeg is installed or downloaded
-    cwd = os.getcwd()
+    cwd = Path.cwd()
     if is_onedrive_path(cwd):
         print("⚠️ Warning: You're running this project inside a OneDrive folder.")
-        print("🔁 This may cause file access errors. Consider moving it to a local folder like C:\\Projects.\n")
+        print("🔁 This may cause file access errors. Consider moving it to a local folder.\n")
 
+    download_model()
     create_venv()
     install_requirements()
     run_chat_py()
