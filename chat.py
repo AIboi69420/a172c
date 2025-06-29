@@ -179,7 +179,7 @@ class ChatApp(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Llama Chat App")
-        self.resize(1000, 700)
+        self.resize(750, 700)
         QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
         self.personalities = load_personalities()
@@ -340,3 +340,4 @@ if __name__ == "__main__":
     win = ChatApp()
     win.show()
     app.exec()
+
