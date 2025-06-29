@@ -27,6 +27,9 @@ MODEL_URL = "https://huggingface.co/openhermes/openhermes-2-mistral-7b.Q4_K_M/re
 
 VENV_DIR = Path("venv")
 
+# Define total steps for progress bar
+TOTAL_STEPS = 5
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -37,7 +40,7 @@ class App(tk.Tk):
         self.status_label = ttk.Label(self, text="Ready.", anchor="center")
         self.status_label.pack(pady=5, fill="x")
 
-        self.progress = ttk.Progressbar(self, mode="indeterminate")
+        self.progress = ttk.Progressbar(self, mode="determinate", maximum=TOTAL_STEPS)
         self.progress.pack(fill="x", padx=20, pady=5)
 
         self.log_text = scrolledtext.ScrolledText(self, height=15, state="disabled", wrap="word")
@@ -46,8 +49,9 @@ class App(tk.Tk):
         self.start_button = ttk.Button(self, text="Start Setup and Launch", command=self.start_process)
         self.start_button.pack(pady=10)
 
+        self.current_step = 0
+
     def log(self, message):
-        # Append message to the log text widget, thread-safe using `after`
         def append():
             self.log_text.config(state="normal")
             self.log_text.insert(tk.END, message + "\n")
@@ -60,8 +64,16 @@ class App(tk.Tk):
             self.status_label.config(text=text)
         self.after(0, update)
 
+    def update_progress(self):
+        self.current_step += 1
+        def update():
+            self.progress['value'] = self.current_step
+        self.after(0, update)
+
     def start_process(self):
         self.start_button.config(state="disabled")
+        self.current_step = 0
+        self.progress['value'] = 0
         threading.Thread(target=self.main_process, daemon=True).start()
 
     def main_process(self):
@@ -71,37 +83,45 @@ class App(tk.Tk):
                 self.log("⚠️ Warning: Running inside OneDrive folder.")
                 self.set_status("⚠️ Warning: Running inside OneDrive folder.")
 
-            self.progress.start()
             self.set_status("Downloading model...")
             self.log("Starting model download...")
             download_model(log_func=self.log)
+            self.update_progress()
 
             self.set_status("Creating virtual environment...")
             self.log("Creating virtual environment...")
             create_venv(log_func=self.log)
+            self.update_progress()
 
             self.set_status("Installing required packages...")
             self.log("Installing required packages...")
             install_requirements(log_func=self.log)
+            self.update_progress()
 
-            self.progress.stop()
             self.set_status("Launching chat.py...")
             self.log("Launching chat.py...")
             run_chat_py(log_func=self.log)
+            self.update_progress()
 
             self.set_status("Done. chat.py is running.")
             self.log("chat.py launched successfully.")
+            self.update_progress()
+
+            # Close the GUI after 1 second delay
+            self.after(1000, self.destroy)
+
         except Exception as e:
-            self.progress.stop()
             self.set_status(f"Error: {e}")
             self.log(f"Error: {e}")
             messagebox.showerror("Error", str(e))
         finally:
             self.start_button.config(state="normal")
 
+
 def run_command(cmd, shell=False, log_func=print):
     log_func(f"Running command: {' '.join(cmd)}")
     subprocess.run(cmd, shell=shell, check=True)
+
 
 def create_venv(log_func=print):
     if VENV_DIR.exists():
@@ -111,6 +131,7 @@ def create_venv(log_func=print):
     log_func("🔧 Creating virtual environment...")
     run_command([sys.executable, "-m", "venv", str(VENV_DIR)], log_func=log_func)
     log_func("✅ Virtual environment created.\n")
+
 
 def get_venv_python():
     if platform.system() == "Windows":
@@ -122,12 +143,14 @@ def get_venv_python():
         raise FileNotFoundError("Python executable not found in virtual environment.")
     return str(python_exe)
 
+
 def install_requirements(log_func=print):
     python_path = get_venv_python()
     run_command([python_path, "-m", "pip", "install", "--upgrade", "pip"], log_func=log_func)
     for pkg in REQUIREMENTS:
         run_command([python_path, "-m", "pip", "install", pkg], log_func=log_func)
     log_func("✅ All required packages installed.\n")
+
 
 def download_model(log_func=print):
     if not MODEL_DIR.exists():
@@ -141,6 +164,7 @@ def download_model(log_func=print):
     log_func(f"⬇️ Downloading model from {MODEL_URL} ...")
     urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
     log_func(f"✅ Model downloaded successfully to {MODEL_PATH}\n")
+
 
 def run_chat_py(log_func=print):
     python_path = get_venv_python()
@@ -170,6 +194,7 @@ def run_chat_py(log_func=print):
             start_new_session=True,
         )
     log_func("chat.py launched successfully.")
+
 
 if __name__ == "__main__":
     app = App()
